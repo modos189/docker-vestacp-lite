@@ -1,0 +1,35 @@
+version: "3"
+
+services:
+  vesta:
+    image: modos189/vestacp-lite
+    container_name: vesta
+    cap_add: ['NET_RAW', 'NET_ADMIN']
+    hostname: yourcpanelhostname.com
+    volumes:
+      - "/opt/vestacp/backup:/backup"
+      - "/opt/vestacp/vesta:/vesta"
+      - "/opt/vestacp/home:/home"
+    ports:
+      - "3322:22"
+      - "80:80"
+      - "443:443"
+      - "8083:8083"
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: 20000
+        hard: 40000
+    sysctls:
+      net.core.somaxconn: '511'
+    labels:
+      - "Vesta Control Panel"
+    restart: always
+
+# Note, set hostname for auto ssl on the panel, it also
+# help with valid IP for SMTP email validation among
+# other things.
+# 
+# also note, I set the port to 9088 above on purpose
+# You can of course change it back to 8083
+# it help with security to change to a different port
