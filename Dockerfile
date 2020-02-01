@@ -7,7 +7,7 @@ RUN chmod +x "/usr/local/bin/cleanimage"
 
 RUN apt-get update \
  && apt-get dist-upgrade -y \
- && apt-get install -y apt-transport-https ca-certificates wget curl gnupg jq nano unzip pwgen apt-utils apparmor memcached \
+ && apt-get install -y apt-transport-https ca-certificates wget curl gnupg jq nano unzip pwgen apt-utils memcached rsyslog ntp \
  && cleanimage
 
 # generate secure password
@@ -21,23 +21,21 @@ RUN pwgen -c -n -1 12 > $HOME/password.txt \
       --vsftpd no --proftpd no \
       --exim yes --dovecot yes --spamassassin yes --clamav yes \
       --named yes \
-      --iptables yes --fail2ban yes \
+      --iptables no --fail2ban yes \
       --mysql yes --postgresql yes \
       --remi yes \
       --quota yes \
  && cleanimage
 
-RUN cd /usr/local/vesta/data/ips && mv * 127.0.0.1 \
- && cd /etc/apache2/conf.d && sed -i -- 's/172.*.*.*:80/127.0.0.1:80/g' * && sed -i -- 's/172.*.*.*:8443/127.0.0.1:8443/g' * \
- && cd /etc/nginx/conf.d && sed -i -- 's/172.*.*.*:80;/80;/g' * && sed -i -- 's/172.*.*.*:8080/127.0.0.1:8080/g' * \
- && cd /home/admin/conf/web && sed -i -- 's/172.*.*.*:80;/80;/g' * && sed -i -- 's/172.*.*.*:8080/127.0.0.1:8080/g' *
+COPY rootfs/. /
 
+RUN cd /usr/local/vesta/data/ips && mv * 127.0.0.1 \
 # increase memcache max size from 64m to 256m
-RUN sed -i -e "s/^\-m 64/\-m 256/g" /etc/memcached.conf \
+ && sed -i -e "s/^\-m 64/\-m 256/g" /etc/memcached.conf \
 # secure ssh
  && sed -i -e "s/PermitRootLogin prohibit-password/PermitRootLogin no/g" /etc/ssh/sshd_config \
  && sed -i -e "s/^#PermitRootLogin yes/PermitRootLogin no/g" /etc/ssh/sshd_config \
-# initialize ips for docker support
+# docker specific
  && cd /etc/apache2/conf.d \
  && sed -i -e "s/172.*.*.*:80/127.0.0.1:80/g" * \
  && sed -i -e "s/172.*.*.*:8443/127.0.0.1:8443/g" * \
@@ -49,6 +47,9 @@ RUN sed -i -e "s/^\-m 64/\-m 256/g" /etc/memcached.conf \
  && sed -i -e "s/172.*.*.*:80;/80;/g" * \
  && sed -i -e "s/172.*.*.*:8080/127.0.0.1:8080/g" * \
  && cd /tmp \
+# postgres patch for this docker
+ && sed -i -e "s/%q%u@%d '/%q%u@%d %r '/g" /etc/postgresql/9.6/main/postgresql.conf \
+ && sed -i -e "s/^#listen_addresses = 'localhost'/listen_addresses = '*'/g" /etc/postgresql/9.6/main/postgresql.conf \
 # php stuff - after vesta because of vesta-php installs
  && sed -i "s/upload_max_filesize = 2M/upload_max_filesize = 600M/" /etc/php/7.0/apache2/php.ini \
  && sed -i "s/upload_max_filesize = 2M/upload_max_filesize = 600M/" /etc/php/7.0/cli/php.ini \
@@ -68,7 +69,14 @@ RUN sed -i -e "s/^\-m 64/\-m 256/g" /etc/memcached.conf \
  \
  && sed -i -e "s/;sendmail_path =/sendmail_path = \/usr\/sbin\/exim \-t/g" /etc/php/7.0/apache2/php.ini \
  && sed -i -e "s/;sendmail_path =/sendmail_path = \/usr\/sbin\/exim \-t/g" /etc/php/7.0/cli/php.ini \
- && sed -i -e "s/;sendmail_path =/sendmail_path = \/usr\/sbin\/exim \-t/g" /etc/php/7.0/cgi/php.ini
+ && sed -i -e "s/;sendmail_path =/sendmail_path = \/usr\/sbin\/exim \-t/g" /etc/php/7.0/cgi/php.ini \
+# docker specific patching
+ && sed -i -e "s/^if (\$dir_name/\/\/if (\$dir_name/g" /usr/local/vesta/web/list/rrd/image.php \
+# increase open file limit for nginx and apache
+ && echo "\n\n* soft nofile 800000\n* hard nofile 800000\n\n" >> /etc/security/limits.conf \
+# apache stuff
+ && echo "\nServerName localhost\n" >> /etc/apache2/apache2.conf \
+ && chmod +x /etc/rc.local
 
 # begin folder redirections
 RUN mkdir -p /vesta-start/etc \
@@ -83,6 +91,7 @@ RUN mkdir -p /vesta-start/etc \
  && rm -rf /etc/ssh \
  && ln -s /vesta/etc/ssh /etc/ssh \
  \
+ && mkdir -p /etc/fail2ban \
  && mv /etc/fail2ban /vesta-start/etc/fail2ban \
  && rm -rf /etc/fail2ban \
  && ln -s /vesta/etc/fail2ban /etc/fail2ban \
@@ -157,7 +166,22 @@ RUN mkdir -p /vesta-start/etc \
  \
  && mv /var/log /vesta-start/var/log \
  && rm -rf /var/log \
- && ln -s /vesta/var/log /var/log
+ && ln -s /vesta/var/log /var/log \
+ \
+ && mkdir -p /sysprepz/home \
+ && rsync -a /home/* /sysprepz/home \
+ && mv /sysprepz/admin/bin /sysprepz/home/admin \
+ && chown -R admin:admin /sysprepz/home/admin/bin \
+ \
+ && mkdir -p /vesta-start/local/vesta/data/sessions \
+ && chmod 775 /vesta-start/local/vesta/data/sessions \
+ && chown root:admin /vesta-start/local/vesta/data/sessions \
+# fix roundcube error log permission
+ && touch /vesta-start/var/log/roundcube/errors \
+ && chown -R www-data:www-data /vesta-start/var/log/roundcube \
+ && chmod 775 /vesta-start/var/log/roundcube/errors \
+## inetutils-syslogd is not installed, but this file is present and conflicts with /etc/logrotate.d/rsyslog
+ && rm -f /etc/logrotate.d/inetutils-syslogd
 
 VOLUME ["/vesta", "/home", "/backup"]
 

@@ -1,27 +1,24 @@
 # VestaCP
-Vesta control panel with docker.
-Based on [niiknow/vestacp](https://github.com/niiknow/vestacp) (1.9.0).
+Vesta control panel with docker. Just debian and vestacp.
 
-<b>What's different from <i>niiknow/vestacp</i>?</b>
+<b>What's different from [niiknow/vestacp](https://github.com/niiknow/vestacp)?</b>
 
 Removed golang, couchdb, redis, openvpn, mongodb, nodejs and dotnet.
+Based on debian 9.
 
 Comparison of size with <i>niiknow/vestacp</i>:
 
 | image               | compressed | uncompressed |
 | ------------------- |:----------:| ------------:|
 | niiknow/vestacp     | 1.69 GB    |       4.87GB |
-| __modos189/vestacp-base__ | __1.04 GB__  |       __2.95GB__ |
+| __modos189/vestacp-lite__ | __789 MB__  |       __2.19GB__ |
 
 <b>What's included?</b>
-* ubuntu 16.04 lts + Vesta 0.9.8-25
-* nginx (proxy) -> apache2 -> php-fcgi - high performance and flexible implementation
+* debian 9 + Vesta 0.9.8-24
+* nginx (proxy) -> apache2
 * ssh/sftp, letsencrypt, memcached, MariaDB 10.2
 * folder redirection for data persistence and automatic daily backup provided by VestaCP
-* DNS, named, dovecot/roundcube, spamassassin, clamav, etc... -- disabled by default
 * vesta panel SSL (LE-issued) for mail and control panel - provide $HOSTNAME environment variable
-* added ability to also run [php-fpm](https://github.com/niiknow/vestacp/blob/master/docs/php-fpm.md)
-![](https://raw.githubusercontent.com/niiknow/vestacp/master/docs/images/php-fpm.png?raw=true)
 
 <b>Run this image:</b>
 ```
@@ -85,9 +82,10 @@ your_domain.com {
 ```
 
 Your site is now proxied to vestcp-docker and automatically received a ssl certificate.
-But so far no access to the vesta control panel. Let's fix this.
 
-Open `nano /opt/vestacp/vesta/local/vesta/nginx/conf/nginx.conf` and change
+You can also access the panel from a separate subdomain:
+
+Open `/opt/vestacp/vesta/local/vesta/nginx/conf/nginx.conf` and change
 `ssl on;` to `ssl off;`
 
 Then restart vesta:
